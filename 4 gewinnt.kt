@@ -2,6 +2,7 @@
 
 package gew
 
+import kotlin.math.pow
 import kotlin.streams.toList
 
 var brett = mutableListOf(
@@ -13,10 +14,10 @@ var brett = mutableListOf(
         0, 0, 0, 0, 0, 0, 0
 )
 
-enum class Schwierigkeit(val minMax: Int, val monteCarlo: Int) {
-    leicht(minMax = 1, monteCarlo = 20000),
-    mittel(minMax = 2, monteCarlo = 10000),
-    schwer(minMax = 3, monteCarlo = 5000)
+enum class Schwierigkeit(var minMax: Int, val zeit: Int) {
+    leicht(minMax = 1, zeit = 1),
+    mittel(minMax = 1, zeit = 5),
+    schwer(minMax = 1, zeit = 10)
 }
 
 
@@ -63,20 +64,40 @@ fun generieren(brett: List<Int>, feld: Int, dran: Int, züge: Int, tabelle: Muta
 
     val knoten = Knoten(kinder, brett = brett, zug = feld, dran = dran)
     tabelle[brett] = knoten
+
+    if (gewonnen(knoten.brett, -1)) {
+        knoten.wert = Int.MIN_VALUE
+    } else if (gewonnen(knoten.brett, 1)) {
+        knoten.wert = Int.MAX_VALUE
+    }
+
+    if (kinder.isNotEmpty()) {
+        val w = if (knoten.dran == 1) {
+            knoten.kinder.maxOf { kind -> kind.wert }
+        } else {
+            knoten.kinder.minOf { kind -> kind.wert }
+        }
+        if (w == Int.MAX_VALUE || w == Int.MIN_VALUE) {
+            knoten.wert = w
+        }
+    }
+
     return knoten
 }
 
-fun minMax(minMax: Int, knoten: Knoten, monteCarlo: Int) {
-    if (gewonnen(knoten.brett, -1)) {
-        knoten.wert = -monteCarlo - 1
+fun monte2(knoten: Knoten) {
+    if (knoten.wert != 0) {
         return
-    } else if (gewonnen(knoten.brett, 1)) {
-        knoten.wert = monteCarlo + 1
-        return
-    } else if (knoten.kinder.isEmpty()) {
-        knoten.wert = monteCarlo(brett = knoten.brett, dran = knoten.dran * -1, knoten = knoten, monteCarlo)
     }
-    knoten.kinder.forEach { kind -> minMax(minMax * -1, kind, monteCarlo) }
+
+    monteCarlo(brett = knoten.brett, dran = knoten.dran, knoten, 1)
+    knoten.kinder.forEach {
+        monte2(it)
+    }
+}
+
+fun minMax(minMax: Int, knoten: Knoten) {
+    knoten.kinder.forEach { kind -> minMax(minMax * -1, kind) }
 
     if (knoten.kinder.isEmpty()) {
         return
@@ -93,7 +114,6 @@ fun monteCarlo(brett: List<Int>, dran: Int, knoten: Knoten, monteCarlo: Int): In
     var durchläufe = monteCarlo
     var wert = 0
     val züge = 0
-
     wert = (0..durchläufe).toList().parallelStream()
             .map { durchlauf(brett = brett.toMutableList(), dran = dran, knoten = knoten, wert = wert, züge = züge) }
             .toList().sum()
@@ -152,13 +172,22 @@ private fun möglichkeiten(brett: List<Int>): MutableList<Int> {
     return möglichkeiten
 }
 
-fun computerZug(s: Schwierigkeit) {
-    val start = System.currentTimeMillis()
+fun computerZug(s: Schwierigkeit, zug: Int) {
     if (s == Schwierigkeit.schwer) {
         println("Bitte warten...")
     }
+    val zeit = System.currentTimeMillis()
     var k = generieren(brett.toMutableList(), -1, 1, züge = s.minMax, mutableMapOf())
-    minMax(1, k, s.monteCarlo)
+
+var durchläufe = 0
+    while (System.currentTimeMillis() - zeit < s.zeit * 1000) {
+        monte2(k)
+        durchläufe += 1
+    }
+    println("durchläufe: "+durchläufe)
+
+
+    minMax(1, k)
     val max = k.kinder.maxOf { kind -> kind.wert }
     val liste = mutableListOf<Knoten>()
     k.kinder.forEach { kind ->
@@ -167,8 +196,8 @@ fun computerZug(s: Schwierigkeit) {
         }
     }
     val zug = liste.random().zug
-    println("wert = $max, zug = $zug dauer = ${(System.currentTimeMillis() - start) / 1000}")
     zug(zug, brett, 1)
+    println("zeit: " + (System.currentTimeMillis() - zeit) / 1000)
 }
 
 fun gewonnen(brett: List<Int>, wer: Int): Boolean {
@@ -247,19 +276,59 @@ fun start(): Int {
 
 fun main() {
     System.setProperty("java.util.concurrent.ForkJoinPool.common.parallelism", "8")
-    //brett = leseBrett().toMutableList()
-
     val s = schwierigkeit()
     var dran = start()
-    var runde = 0
+    var runde = 1
     while (true) {
+        if (runde == 10) {
+            if (s == Schwierigkeit.schwer) {
+                s.minMax = 2
+            }
+        } else if (runde == 15) {
+            if (s == Schwierigkeit.schwer) {
+                s.minMax = 3
+            } else if (s == Schwierigkeit.mittel) {
+                s.minMax = 2
+            }
+        } else if (runde == 20) {
+            if (s == Schwierigkeit.schwer) {
+                s.minMax = 4
+            } else if (s == Schwierigkeit.mittel) {
+                s.minMax = 3
+            }
+            if (s == Schwierigkeit.leicht) {
+                s.minMax = 2
+            } else if (runde == 25) {
+                if (s == Schwierigkeit.schwer) {
+                    s.minMax = 5
+                } else if (s == Schwierigkeit.mittel) {
+                    s.minMax = 4
+                    if (s == Schwierigkeit.leicht) {
+                        s.minMax = 3
+                    }
+                } else if (runde == 34) {
+                    if (s == Schwierigkeit.schwer) {
+                        s.minMax = 8
+                    }
+                } else if (runde == 36) {
+                    if (s == Schwierigkeit.mittel) {
+                        s.minMax = 6
+                    }
+                } else if (runde == 38) {
+                    if (s == Schwierigkeit.leicht) {
+                        s.minMax = 4
+                    }
+                }
+            }
+        }
         if (dran == -1) {
-            computerZug(s)
+            computerZug(s, zug = runde)
             dran = 1
         } else {
             menschZug(züge = runde)
             dran = -1
         }
+        println("  1 2 3 4 5 6 7  ")
         println("+---------------+")
         var zeile = 0
         while (zeile < 6) {
@@ -309,31 +378,4 @@ fun schwierigkeit(): Schwierigkeit {
         }
         return Schwierigkeit.values()[eingabe - 1]
     }
-}
-
-fun leseBrett(): List<Int> {
-    val s = """
-    +---------------+
-    |   x o x o x   |
-    |   x x o o x   |
-    | x o o o x x   |
-    | o x x o o o   |
-    | o x o x x x   |
-    | o x o o x o   |
-    +---------------+
-            """
-    return s.split("\n")
-            .drop(2)
-            .take(6)
-            .map { zeile ->
-                val ohne = zeile.substringAfter("|")
-                (0..6).map { spalte ->
-                    when (ohne[spalte * 2 + 1]) {
-                        'x' -> -1
-                        'o' -> 1
-                        else -> 0
-                    }
-                }
-            }
-            .flatten()
 }
