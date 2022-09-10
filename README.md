@@ -13,7 +13,7 @@ Clone the repository:
 git clone https://github.com/AlphaCodingPilot/AI-Collection.git
 ```
 ## Usage
-Run the corresponding file in the src directory through the terminal to play a game against the AI.
+Run the corresponding file through the terminal to play a game against the AI.
 
 ## Contributing
 Pull requests are welcome. Before doing major changes please open a pull request first to discus it.
